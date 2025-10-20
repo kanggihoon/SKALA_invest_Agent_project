@@ -1,4 +1,4 @@
-# AI Startup Investment Evaluation Agent — 발표용 README
+# AI Startup Investment Evaluation Agent
 
 > **목적**: 물류/유통 도메인 스타트업을 중심으로, 기술성·시장성·경쟁력·리스크를 다각도로 평가해 **투자 판단**과 **보고서 자동 생성**을 수행하는 Multi‑Agent 시스템입니다. 코어 프레임은 **LangGraph**, 검색·근거 주입은 **Agentic RAG**로 구성합니다.
 
