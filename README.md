@@ -8,7 +8,7 @@
 - **Workflow**: Startup scouting → Tech summary → Market evaluation → Competitor analysis → Investment decision → (Hold loop or Report export)
 - **핵심 가치**
   - 자료 기반(보고서/기사/PDF)의 **자동 정보 추출**과 **근거 중심 평가지표** 수립
-  - **루프 기반 판단 보정(Hold 시 재탐색)**으로 누락 정보 보완
+  - 루프 기반 판단 보정(Hold 시 재탐색)으로 누락 정보 보완
   - **README/Investment Brief** 등 산출물 자동화
 
 ---
