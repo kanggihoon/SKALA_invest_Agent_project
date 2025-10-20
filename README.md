@@ -112,8 +112,17 @@ outputs/         # 리포트 산출물
 ```
 **.env**
 ```
-OPENAI_API_KEY=sk-...
-POSTGRES_DSN=postgresql+psycopg2://user:pass@host:5432/dbname  # optional
+OPENAI_API_KEY=
+LANGCHAIN_TRACING_V2=false
+LANGCHAIN_PROJECT=SKALA
+LANGCHAIN_ENDPOINT=
+LANGCHAIN_API_KEY=
+TAVILY_API_KEY=
+DB_NAME=
+DB_USER=
+DB_PASSWORD=
+DB_HOST=
+DB_PORT=
 ```
 **Run**
 ```bash
