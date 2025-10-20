@@ -14,23 +14,23 @@
 ---
 
 ## 2) Agent 구성 (How we structure the agents)
-- **Agent A — Startup Scouting**
+- **Agent : Startup Scouting**
   - 입력: 도메인 키워드, 기존 DB 요약, 검색 의도
   - 출력: 후보 스타트업 목록, 핵심 기술/제품 요약(raw 메모 포함)
-- **Agent B — Tech Summary**
+- **Agent : Tech Summary**
   - 입력: 스카우팅 결과 + RAG 컨텍스트
   - 출력: 기술 요약(핵심 기술·차별화·모델/데이터·IP), 기술 성숙도(TRL) 추정
-- **Agent C — Market Evaluation**
+- **Agent : Market Evaluation**
   - 입력: 산업 리포트/뉴스 RAG 컨텍스트
   - 출력: 시장 크기/TAM·CAGR·수익화 모델, 규제/리스크, GTM 요약
-- **Agent D — Competitor Analysis**
+- **Agent : Competitor Analysis**
   - 입력: 경쟁사 문서 RAG 컨텍스트
   - 출력: 주요 경쟁사 3~5개, 포지셔닝(가격·성능·세그먼트), 우위/열위
-- **Agent E — Investment Decision (Judge)**
+- **Agent : Investment Decision (Judge)**
   - 입력: DB에 축적된 Tech/Market/Competition 결과
   - 출력: **recommend/hold/pass** + 점수(0–100) + rationale
   - 분기: `hold` → 결측/불확실 항목을 쿼리로 반영하여 **Scouting으로 루프백**
-- **Agent F — Report Generator**
+- **Agent : Report Generator**
   - 입력: 최종 판단 및 근거
   - 출력: `outputs/investment_report.md(.docx)` / 프로젝트 `README.md`
 
