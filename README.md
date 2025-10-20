@@ -87,6 +87,7 @@
   - 조건: `if decision==hold` → `startup_search` (루프)
 - **장점**
   - 단계별 실패 격리, 재시도/분기 제어, 로깅 일관성
+<img width="224" height="623" alt="image" src="https://github.com/user-attachments/assets/07d27082-534d-4b22-81a4-57965e920cbd" />
 
 ---
 
