@@ -20,6 +20,27 @@ try:
 except Exception:
     pass
 
+# Normalize/override OpenAI key so auth errors are less likely
+def _normalize_openai_env():
+    # Accept common variants and map to OPENAI_API_KEY
+    aliases = [
+        "OPENAI_API_KEY",
+        "OPEN_API_KEY",
+        "OPENAI_KEY",
+        "OPENAI",
+        "OPENAI_SECRET",
+    ]
+    key = None
+    for a in aliases:
+        v = os.getenv(a)
+        if v and len(v.strip()) > 10:
+            key = v.strip()
+            break
+    if key:
+        os.environ["OPENAI_API_KEY"] = key
+
+_normalize_openai_env()
+
 from rag.loaders import load_dir
 from rag.vector import as_retriever, build_index
 from agents.scout import scout_chain
@@ -422,11 +443,15 @@ if __name__ == "__main__":
     p.add_argument("--trace", action="store_true", help="Enable LangSmith tracing")
     p.add_argument("--project", default="InvestAgent", help="LangSmith project name")
     p.add_argument("--viz", action="store_true", help="Save graph PNG to outputs/graph.png")
+    p.add_argument("--openai-key", default=None, help="Override OPENAI_API_KEY for this run")
     args = p.parse_args()
 
     if args.trace:
         os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
         os.environ.setdefault("LANGCHAIN_PROJECT", args.project)
+
+    if args.openai_key:
+        os.environ["OPENAI_API_KEY"] = args.openai_key
 
     app = build_graph()
     state: S = {

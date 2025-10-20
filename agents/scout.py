@@ -6,6 +6,12 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from rag.prompts import system_prompt, SCOUT_SYS_DEFAULT, config_text
 
+def _retrieve(retriever, query: str):
+    try:
+        return retriever.invoke(query)
+    except Exception:
+        return retriever.get_relevant_documents(query)
+
 
 def scout_chain(retriever, model: str = "gpt-4o-mini"):
     sys_msg = system_prompt("startup_search", SCOUT_SYS_DEFAULT)
@@ -22,7 +28,7 @@ def scout_chain(retriever, model: str = "gpt-4o-mini"):
     def run(domain: str, query: str) -> Dict:
         # Strengthen retrieval with explicit unified keywords
         composed = f"{domain} AI 인공지능 머신러닝 ML LLM 물류 유통 logistics 'supply chain' SCM {query}"
-        docs = retriever.get_relevant_documents(composed)
+        docs = _retrieve(retriever, composed)
         ctx = "\n\n".join(d.page_content[:1000] for d in docs)
         out = (prompt | llm).invoke({"domain": domain, "query": query, "ctx": ctx}).content
 

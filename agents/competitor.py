@@ -37,7 +37,10 @@ Context:
         names = names[:3] if names else []
         header = "| 기준 | " + " | ".join(names) + " |" if names else "| 기준 | 후보A | 후보B | 후보C |"
         query = f"{domain} competitors " + " ".join(names) if names else domain
-        docs = retriever.get_relevant_documents(query)
+        try:
+            docs = retriever.invoke(query)
+        except Exception:
+            docs = retriever.get_relevant_documents(query)
         ctx = "\n\n".join(d.page_content[:1200] for d in docs)
         out = (prompt | llm).invoke({
             "domain": domain,

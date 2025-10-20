@@ -17,7 +17,10 @@ def market_chain(retriever, model: str = "gpt-4o-mini"):
     llm = ChatOpenAI(model=model, temperature=0)
 
     def run(domain: str, name: str):
-        docs = retriever.get_relevant_documents(f"{domain} {name} market size")
+        try:
+            docs = retriever.invoke(f"{domain} {name} market size")
+        except Exception:
+            docs = retriever.get_relevant_documents(f"{domain} {name} market size")
         ctx = "\n\n".join(d.page_content[:1000] for d in docs)
         out = (prompt | llm).invoke({"domain": domain, "name": name, "ctx": ctx}).content
         # Try parse JSON

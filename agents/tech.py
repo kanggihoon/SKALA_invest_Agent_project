@@ -18,7 +18,10 @@ def tech_chain(retriever, model: str = "gpt-4o-mini"):
     llm = ChatOpenAI(model=model, temperature=0)
 
     def run(name: str, query: str, tech_raw: str | None = None):
-        docs = retriever.get_relevant_documents(f"{name} {query}")
+        try:
+            docs = retriever.invoke(f"{name} {query}")
+        except Exception:
+            docs = retriever.get_relevant_documents(f"{name} {query}")
         parts = []
         if tech_raw:
             parts.append(f"[DB] {tech_raw}")
