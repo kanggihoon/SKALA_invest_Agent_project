@@ -14,23 +14,23 @@
 ---
 
 ## 2) Agent 구성 (How we structure the agents)
-- **Agent A — Startup Scouting**
+- **Agent : Startup Scouting**
   - 입력: 도메인 키워드, 기존 DB 요약, 검색 의도
   - 출력: 후보 스타트업 목록, 핵심 기술/제품 요약(raw 메모 포함)
-- **Agent B — Tech Summary**
+- **Agent : Tech Summary**
   - 입력: 스카우팅 결과 + RAG 컨텍스트
   - 출력: 기술 요약(핵심 기술·차별화·모델/데이터·IP), 기술 성숙도(TRL) 추정
-- **Agent C — Market Evaluation**
+- **Agent :  Market Evaluation**
   - 입력: 산업 리포트/뉴스 RAG 컨텍스트
   - 출력: 시장 크기/TAM·CAGR·수익화 모델, 규제/리스크, GTM 요약
-- **Agent D — Competitor Analysis**
+- **Agent : Competitor Analysis**
   - 입력: 경쟁사 문서 RAG 컨텍스트
   - 출력: 주요 경쟁사 3~5개, 포지셔닝(가격·성능·세그먼트), 우위/열위
-- **Agent E — Investment Decision (Judge)**
+- **Agent : Investment Decision (Judge)**
   - 입력: DB에 축적된 Tech/Market/Competition 결과
   - 출력: **recommend/hold/pass** + 점수(0–100) + rationale
   - 분기: `hold` → 결측/불확실 항목을 쿼리로 반영하여 **Scouting으로 루프백**
-- **Agent F — Report Generator**
+- **Agent : Report Generator**
   - 입력: 최종 판단 및 근거
   - 출력: `outputs/investment_report.md(.docx)` / 프로젝트 `README.md`
 
@@ -40,7 +40,7 @@
 
 ## 3) 시스템 동작 (How it works end‑to‑end)
 1. **도큐먼트 적재(Ingestion)**: `data/` 폴더의 PDF/웹캡처/CSV 등을 로더로 읽고, 청크 단위로 전처리
-2. **임베딩 & 인덱스**: `multilingual-e5-large` 임베딩 → **Chroma** 컬렉션(tech/market/competitors/scout) 생성
+2. **임베딩 & 인덱스**: `multilingual-e5-base` 임베딩 → **Chroma** 컬렉션(tech/market/competitors/scout) 생성
 3. **LangGraph 실행**
    - (병렬) **Tech Summary** 와 **Market/Competitor** 에이전트가 각자 필요한 RAG 컨텍스트를 조회
    - (직렬) **Investment Decision** 노드에서 점수화·판단
@@ -54,7 +54,7 @@
   - Scouting/Tech/Market/Competitor 단계에서 **문서 근거를 검색**해 요약·분석에 투입
 - **어떻게?**
   1) **Chunking**: 문서 길이/섹션기반 청크(문단·표 캡션 포함)
-  2) **Embedding**: `multilingual-e5-large` (cosine)
+  2) **Embedding**: `multilingual-e5-base` (cosine)
   3) **Retrieve**: 질의 재작성(Multi‑Query) → Top‑k(예: 6–12) 검색
   4) **Prompt Compose**: *retrieved contexts + DB 필드*를 시스템 프롬프트에 주입
   5) **Guardrails**: 출처 메타데이터(문서명/페이지/URL)와 함께 요약·근거를 출력
@@ -87,7 +87,7 @@
   - 조건: `if decision==hold` → `startup_search` (루프)
 - **장점**
   - 단계별 실패 격리, 재시도/분기 제어, 로깅 일관성
-<img width="224" height="623" alt="image" src="https://github.com/user-attachments/assets/07d27082-534d-4b22-81a4-57965e920cbd" />
+  <img width="269" height="753" alt="graph (3)" src="https://github.com/user-attachments/assets/71e66a40-84b2-4a67-ac55-3e542f17f81f" />
 
 ---
 
@@ -95,7 +95,7 @@
 - **Framework**: LangGraph, LangChain, Python
 - **LLM**: GPT‑4o‑mini (OpenAI API)
 - **Retrieval**: Chroma (FAISS 대체 가능)
-- **Embedding**: `multilingual-e5-large` (HuggingFace)
+- **Embedding**: `multilingual-e5-base` (HuggingFace)
 - **DB**: PostgreSQL (SQLAlchemy로 연결)
 - **Etc.**: python‑dotenv, `python-docx`(선택), `psycopg2-binary`
 
