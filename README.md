@@ -154,9 +154,9 @@ python SCM/invest-agent/graph/app.py
 ---
 
 ### Contributors
-- 강기훈: 
-- 김채연: 
-- 이광호: 
-- 이재하: 
+- 강기훈: rag 설계 및 구현, agent 병합 및 수정, 보고서 생성 
+- 김채연: 스타트업 탐색 agent 기술요약 agent
+- 이광호: 시장평가 agent, 경쟁사 비교 agent
+- 이재하: 스타트업 탐색 agent 기술요약 agent
 
 ---
