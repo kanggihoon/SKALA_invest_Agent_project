@@ -1,0 +1,339 @@
+﻿from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+from typing import List, Literal, Optional, TypedDict
+
+from langgraph.graph import END, StateGraph
+
+BASE = Path(__file__).resolve().parent.parent
+if str(BASE) not in sys.path:
+    sys.path.insert(0, str(BASE))
+
+# Load .env if present
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    load_dotenv(BASE.parent.parent / ".env")
+except Exception:
+    pass
+
+from rag.loaders import load_dir
+from rag.vector import as_retriever, build_index
+from agents.scout import scout_chain
+from agents.tech import tech_chain
+from agents.market import market_chain
+from agents.competitor import competitor_chain
+from agents.decision import decision_chain
+from agents.report import (
+    write_report,
+    generate_project_readme_md,
+    write_text,
+    write_docx_report,
+)
+from db.postgres import (
+    get_engine,
+    log_run,
+    upsert_startup,
+    update_startup_columns,
+    get_startup_by_name,
+    add_startup_sources,
+)
+
+
+class S(TypedDict, total=False):
+    domain: str
+    query: str
+    target: Optional[str]
+    tech_raw: Optional[str]
+    tech: Optional[str]
+    market: Optional[str]
+    comp: Optional[str]
+    decision: Optional[Literal["recommend", "hold", "pass"]]
+    score: Optional[int]
+    rationale: Optional[str]
+    sources: List[str]
+    report_path: Optional[str]
+    report_docx_path: Optional[str]
+    candidates: Optional[List[dict]]
+    cand_idx: Optional[int]
+
+
+INDEX_DIR = BASE / ".index"
+DATA_DIRS = {
+    "scout": BASE / "data" / "scout",
+    "tech": BASE / "data" / "tech",
+    "market": BASE / "data" / "market",
+    "comp": BASE / "data" / "competitors",
+}
+
+
+def prepare():
+    INDEX_DIR.mkdir(exist_ok=True)
+    retrievers = {}
+    for name, d in DATA_DIRS.items():
+        idx_dir = INDEX_DIR / name
+        if not idx_dir.exists():
+            docs = load_dir(str(d))
+            build_index(docs, str(idx_dir))
+        if idx_dir.exists() and any(idx_dir.iterdir()):
+            retrievers[name] = as_retriever(str(idx_dir))
+    return retrievers
+
+
+IDX = prepare()
+PG_ENGINE = get_engine()
+
+
+class _NullRetriever:
+    def get_relevant_documents(self, *_args, **_kwargs):
+        return []
+
+
+def n_scout(s: S):
+    run = scout_chain(IDX.get("scout", _NullRetriever()))
+
+    # Use existing candidates if any
+    cands = s.get("candidates") or []
+    idx = s.get("cand_idx") if s.get("cand_idx") is not None else 0
+    used_existing = False
+    if cands and idx < len(cands):
+        cand = cands[idx]
+        s["cand_idx"] = idx + 1
+        s["target"] = cand.get("name") or s.get("target")
+        s["tech_raw"] = cand.get("tech") or s.get("tech_raw")
+        used_existing = True
+    else:
+        # Always attempt an LLM-based scout, even without index
+        res = run(s["domain"], s["query"])  # type: ignore[index]
+        first = {}
+        if res.get("target"):
+            first = {"name": res.get("target"), "tech": res.get("tech_raw")}
+        s["candidates"] = [first] if first else []
+        s["cand_idx"] = 1 if first else 0
+        s["target"] = first.get("name") if first else s.get("target") or "TOP-1-STARTUP"
+        s["tech_raw"] = first.get("tech") if first else s.get("tech_raw")
+        s["sources"] = s.get("sources", []) + (res.get("sources") or ["scout"])  # type: ignore[arg-type]
+
+    # Persist to DB
+    if PG_ENGINE and s.get("target"):
+        upsert_startup(
+            PG_ENGINE,
+            domain=s.get("domain", ""),
+            query=s.get("query", ""),
+            name=s["target"],  # type: ignore[index]
+            tech_raw=s.get("tech_raw"),
+        )
+        if not used_existing and s.get("sources"):
+            try:
+                add_startup_sources(PG_ENGINE, s["target"], list(dict.fromkeys(s["sources"]))[:10])  # type: ignore[arg-type]
+            except Exception:
+                pass
+    return s
+
+
+def n_tech(s: S):
+    run = tech_chain(IDX.get("tech", _NullRetriever()))
+    if PG_ENGINE and s.get("target"):
+        rec = get_startup_by_name(PG_ENGINE, s["target"])  # type: ignore[arg-type]
+        if rec and rec.get("tech_raw"):
+            s["tech_raw"] = rec.get("tech_raw")
+    s["tech"] = run(s["target"], s["query"])  # always callable
+    if PG_ENGINE and s.get("target"):
+        update_startup_columns(PG_ENGINE, s["target"], {"tech_summary": s.get("tech")})  # type: ignore[arg-type]
+    s.setdefault("sources", []).append("tech")
+    return s
+
+
+def n_market(s: S):
+    run = market_chain(IDX.get("market", _NullRetriever()))
+    s["market"] = run(s["domain"], s["target"])  # always callable
+    if PG_ENGINE and s.get("target"):
+        update_startup_columns(PG_ENGINE, s["target"], {"market_eval": s.get("market")})  # type: ignore[arg-type]
+    s.setdefault("sources", []).append("market")
+    return s
+
+
+def n_comp(s: S):
+    run = competitor_chain(IDX.get("comp", _NullRetriever()))
+    s["comp"] = run(s["domain"], s["target"])  # always callable
+    if PG_ENGINE and s.get("target"):
+        update_startup_columns(PG_ENGINE, s["target"], {"competitor_analysis": s.get("comp")})  # type: ignore[arg-type]
+    s.setdefault("sources", []).append("competitors")
+    return s
+
+
+def n_decision(s: S):
+    run = decision_chain()
+    if PG_ENGINE and s.get("target"):
+        rec = get_startup_by_name(PG_ENGINE, s["target"])  # type: ignore[arg-type]
+        if rec:
+            s["tech"] = rec.get("tech_summary") or s.get("tech")
+            s["market"] = rec.get("market_eval") or s.get("market")
+            s["comp"] = rec.get("competitor_analysis") or s.get("comp")
+    out = run(s.get("tech") or "", s.get("market") or "", s.get("comp") or "")
+    s["decision"] = out.get("verdict")  # type: ignore[assignment]
+    s["score"] = out.get("score")  # type: ignore[assignment]
+    s["rationale"] = out.get("rationale")  # type: ignore[assignment]
+    if PG_ENGINE and s.get("target"):
+        update_startup_columns(
+            PG_ENGINE,
+            s["target"],  # type: ignore[arg-type]
+            {"decision": s.get("decision"), "score": s.get("score"), "rationale": s.get("rationale")},
+        )
+    if s["decision"] == "hold" and out.get("missing"):
+        s["query"] = s["query"] + " " + " ".join(out["missing"])  # type: ignore[index]
+    return s
+
+
+def n_report(s: S):
+    s["report_path"] = write_report(
+        verdict=s.get("decision") or "hold",
+        score=s.get("score") or 0,
+        rationale=s.get("rationale") or "",
+        tech=s.get("tech") or "",
+        market=s.get("market") or "",
+        comp=s.get("comp") or "",
+        actions="異붽? ?덊띁?곗뒪/?ㅼ궗??怨좉컼 MRR 利앸튃 ?붿껌",
+        sources=s.get("sources") or [],
+        path=str(BASE / "outputs" / "investment_report.md"),
+    )
+    docx_path = write_docx_report(
+        verdict=s.get("decision") or "hold",
+        score=s.get("score") or 0,
+        rationale=s.get("rationale") or "",
+        tech=s.get("tech") or "",
+        market=s.get("market") or "",
+        comp=s.get("comp") or "",
+        actions="異붽? ?덊띁?곗뒪/?ㅼ궗??怨좉컼 MRR 利앸튃 ?붿껌",
+        sources=s.get("sources") or [],
+        path=str(BASE / "outputs" / "investment_report.docx"),
+    )
+    if docx_path:
+        s["report_docx_path"] = docx_path
+    readme_md = generate_project_readme_md(s)
+    write_text(str(BASE / "outputs" / "README.md"), readme_md)
+    log_run(PG_ENGINE, s)
+    return s
+
+
+def build_graph():
+    g = StateGraph(S)
+    g.add_node("startup_search", n_scout)
+    g.add_node("tech_summary", n_tech)
+    g.add_node("market_eval", n_market)
+    g.add_node("competitor_analysis", n_comp)
+    g.add_node("investment_decision", n_decision)
+    g.add_node("report_writer", n_report)
+
+    g.set_entry_point("startup_search")
+    g.add_edge("startup_search", "tech_summary")
+    g.add_edge("tech_summary", "market_eval")
+    g.add_edge("market_eval", "competitor_analysis")
+    g.add_edge("competitor_analysis", "investment_decision")
+
+    def after_decision(s: S):
+        v = (s.get("decision") or "").lower()
+        if v in ("recommend", "invest"):
+            return "invest"
+        if v == "hold":
+            return "hold"
+        return END
+
+    g.add_conditional_edges(
+        "investment_decision",
+        after_decision,
+        {"invest": "report_writer", "hold": "startup_search", END: END},
+    )
+    g.add_edge("report_writer", END)
+    return g.compile()
+
+
+if __name__ == "__main__":
+    import argparse
+
+    p = argparse.ArgumentParser()
+    p.add_argument("--domain", default="臾쇰쪟/?좏넻")
+    p.add_argument("--query", default="?좎꽑?앺뭹 ?쇱뒪?몃쭏???됱옣 臾쇰쪟 ?먮룞??)
+    p.add_argument("--stream", action="store_true", help="Stream LangGraph updates with tqdm progress")
+    p.add_argument("--trace", action="store_true", help="Enable LangSmith tracing")
+    p.add_argument("--project", default="InvestAgent", help="LangSmith project name")
+    args = p.parse_args()
+
+    if args.trace:
+        os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+        os.environ.setdefault("LANGCHAIN_PROJECT", args.project)
+
+    app = build_graph()
+    state: S = {
+        "domain": args.domain,
+        "query": args.query,
+        "target": None,
+        "tech_raw": None,
+        "tech": None,
+        "market": None,
+        "comp": None,
+        "decision": None,
+        "score": None,
+        "rationale": None,
+        "sources": [],
+        "report_path": None,
+        "report_docx_path": None,
+        "candidates": None,
+        "cand_idx": 0,
+    }
+
+    def _summarize_node(node_name: str, st: dict) -> str:
+        try:
+            if node_name == "startup_search":
+                tgt = st.get("target")
+                return f"target={tgt or '-'}"
+            if node_name == "tech_summary":
+                t = (st.get("tech") or "").strip().splitlines()
+                return f"tech={' '.join(t[:1])[:80]}" if t else "tech=-"
+            if node_name == "market_eval":
+                m = (st.get("market") or "").strip().splitlines()
+                return f"market={' '.join(m[:1])[:80]}" if m else "market=-"
+            if node_name == "competitor_analysis":
+                c = (st.get("comp") or "").splitlines()
+                rows = sum(1 for ln in c if '|' in ln)
+                return f"competitors_rows={rows}"
+            if node_name == "investment_decision":
+                return f"verdict={st.get('decision')} score={st.get('score')}"
+            if node_name == "report_writer":
+                return f"report={st.get('report_path')}"
+        except Exception:
+            pass
+        return "-"
+
+    if args.stream:
+        try:
+            from tqdm import tqdm
+        except Exception:
+            tqdm = None  # type: ignore
+
+        pbar = tqdm(total=0, unit="node", desc="Pipeline", dynamic_ncols=True) if 'tqdm' in globals() and tqdm else None
+        final_state = None
+        for updates in app.stream(state, stream_mode="updates"):
+            for node_name, delta in updates.items():
+                if node_name == "__end__":
+                    final_state = delta
+                    continue
+                summary = _summarize_node(node_name, delta if isinstance(delta, dict) else {})
+                if pbar:
+                    pbar.update(1)
+                    pbar.set_postfix_str(f"{node_name} | {summary}")
+                else:
+                    print(f"[node] {node_name} :: {summary}")
+        if pbar:
+            pbar.close()
+        out = final_state if isinstance(final_state, dict) else app.invoke(state)
+    else:
+        out = app.invoke(state)
+
+    print("Decision:", out.get("decision"))
+    if out.get("report_path"):
+        print("Report:", out["report_path"])  # type: ignore[index]
+
