@@ -1,6 +1,6 @@
-# AI Startup Investment Evaluation Agent — 발표용 README
+# AI Startup Investment Evaluation Agent
 
-> **목적**: 물류/유통 도메인 스타트업을 중심으로, 기술성·시장성·경쟁력·리스크를 다각도로 평가해 **투자 판단**과 **보고서 자동 생성**을 수행하는 Multi‑Agent 시스템입니다. 코어 프레임은 **LangGraph**, 검색·근거 주입은 **Agentic RAG**로 구성합니다.
+> **목적**: 물류/유통 도메인 스타트업을 중심으로, 기술성·시장성·경쟁력·리스크를 다각도로 평가해 **투자 판단**과 **보고서 자동 생성**을 수행하는 Multi‑Agent 시스템입니다. 코어 프레임은 **LangGraph**, 검색·근거 주입은 **Agentic RAG**로 구성.
 
 ---
 
@@ -127,27 +127,5 @@ python SCM/invest-agent/graph/app.py
 - `outputs/investment_report.docx` : 동명 Word 리포트(옵션)
 - `outputs/README.md` : 프로젝트 실행 요약(환경/파이프라인/결과 하이라이트)
 
----
 
-## 10) 협업 가이드 (Git & 팀 운영)
-- **브랜치 전략**: `main`(안정) / `dev`(통합) / `feature/*`(에이전트·RAG·DB 별)
-- **PR 규칙**: 그래프 변경은 **Mermaid/다이어그램**과 함께 PR; 프롬프트 변경은 **diff와 샘플 출력** 첨부
-- **데이터/키 관리**: `.env`는 로컬 전용, 공유는 `.env.sample`로 대체
-
----
-
-## 11) 데모 시나리오 (예)
-1) `도메인=물류/유통`, 키워드: “AI Fulfillment”, “Route Optimization”
-2) Scouting: 후보 5개 도출, 각사 one‑liner & 링크
-3) Tech/Market/Competitor: 근거 6–12개 검색/요약
-4) Decision: **Score 85, recommend**, 리포트/README 생성
-
----
-
-### Contributors
-- 강기훈: 
-- 김채연: 
-- 이광호: 
-- 이재하: 
-
----
+--
